@@ -1,25 +1,72 @@
 package example;
 
+import java.io.FileOutputStream;
+import java.io.FileWriter;
 import java.io.IOException;
-import java.io.InputStream;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.ServerSocket;
-import java.net.Socket;
+import java.net.*;
+import java.util.Arrays;
 
-public class Server {
-    private byte[] buf = new byte[1];
+public class Server implements AutoCloseable {
+    private byte[] buf = new byte[1024];
+    private final DatagramSocket socket;
 
-    public void listen(int port) throws IOException {
-        try (
-                DatagramSocket socket = new DatagramSocket(port)
-        ) {
-            while (true) {
-                DatagramPacket packet = new DatagramPacket(buf, buf.length);
-                socket.receive(packet);
-                String received = new String(packet.getData(), 0, packet.getLength());
+    public Server(int port) {
+        try {
+            socket = new DatagramSocket(port);
+        } catch (SocketException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public void listen() throws IOException {
+        while (true) {
+            String received = receiveString();
+            if (received.startsWith("[") && received.endsWith("]")) {
+                receiveFile(received.substring(1, received.length() - 1));
+            } else {
                 System.out.print(received);
             }
         }
+    }
+
+    private void receiveFile(String fileName) {
+        try {
+            try (FileOutputStream fw = new FileOutputStream(fileName)) {
+                while (true) {
+                    byte[] b = receiveBytes();
+                    String s = new String(b);
+                    if ("[EOF]".equals(s)) {
+                        break;
+                    } else {
+                        fw.write(b);
+                    }
+                }
+            }
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
+    private byte[] receiveBytes() throws IOException {
+        DatagramPacket packet = new DatagramPacket(buf, buf.length);
+        socket.receive(packet);
+        System.out.print(getString(packet));
+        return Arrays.copyOfRange(packet.getData(), packet.getOffset(), packet.getLength());
+    }
+
+    private String receiveString() throws IOException {
+        DatagramPacket packet = new DatagramPacket(buf, buf.length);
+        socket.receive(packet);
+        System.out.print(getString(packet));
+        return getString(packet);
+    }
+
+    private String getString(DatagramPacket packet) {
+        return new String(packet.getData(), packet.getOffset(), packet.getLength());
+    }
+
+    @Override
+    public void close() {
+        socket.close();
     }
 }
