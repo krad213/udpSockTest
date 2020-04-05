@@ -1,9 +1,10 @@
 package example;
 
 import java.io.FileOutputStream;
-import java.io.FileWriter;
 import java.io.IOException;
-import java.net.*;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.SocketException;
 import java.util.Arrays;
 
 public class Server implements AutoCloseable {
@@ -50,14 +51,12 @@ public class Server implements AutoCloseable {
     private byte[] receiveBytes() throws IOException {
         DatagramPacket packet = new DatagramPacket(buf, buf.length);
         socket.receive(packet);
-        System.out.print(getString(packet));
         return Arrays.copyOfRange(packet.getData(), packet.getOffset(), packet.getLength());
     }
 
     private String receiveString() throws IOException {
         DatagramPacket packet = new DatagramPacket(buf, buf.length);
         socket.receive(packet);
-        System.out.print(getString(packet));
         return getString(packet);
     }
 
