@@ -1,7 +1,5 @@
 package example;
 
-import java.io.FileNotFoundException;
-import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 
@@ -11,8 +9,6 @@ public class Main {
             System.out.println("Usage:\n" +
                     "Start receiver:\n" +
                     "udpSockTest port\n" +
-                    "Start sender:\n" +
-                    "udpSockTest address:port\n" +
                     "Send file:\n" +
                     "udpSockTest address:port fileName\n");
             return;
@@ -20,18 +16,13 @@ public class Main {
 
         if (args[0].contains(":")) {
             final String[] addr = args[0].split(":");
-            try (Client client = new Client(addr[0], Integer.parseInt(addr[1]))) {
-                if (args.length == 1) {
-                    client.send(new InputStreamReader(System.in));
-                } else {
-                    client.sendFile(args[1]);
-                }
-            }
+            Client client = new Client(addr[0], Integer.parseInt(addr[1]));
+            client.sendFile(args[1]);
         } else {
-            try (Server server = new Server(Integer.parseInt(args[0]))) {
-                server.listen();
-            }
+            Server receiver = new Server(Integer.parseInt(args[0]));
+            receiver.receiveFile();
         }
+        System.exit(0);
     }
 
 

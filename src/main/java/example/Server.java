@@ -2,70 +2,79 @@ package example;
 
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.SocketException;
+import java.net.InetAddress;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 
-public class Server implements AutoCloseable {
-    private byte[] buf = new byte[1024];
-    private final DatagramSocket socket;
+import static example.Replies.NOK;
+import static example.Replies.OK;
+
+public class Server {
+
+    private Receiver receiver;
+    private int port;
 
     public Server(int port) {
+        receiver = new Receiver(port);
+        this.port = port;
+    }
+
+    public void receiveFile() {
         try {
-            socket = new DatagramSocket(port);
-        } catch (SocketException e) {
+            receiver.listen();
+            System.out.println("Waiting for file info...");
+            Packet packet = receiver.take();
+            System.out.println("Info received");
+            DatagramPacket sourcePacket = packet.getSourcePacket();
+
+            Sender sender;
+            InetAddress address = sourcePacket.getAddress();
+            System.out.println("Source: " + address + ":" + sourcePacket.getPort());
+            if (address.isLoopbackAddress()) {
+                sender = new Sender(address, port + 1);
+            } else {
+                sender = new Sender(address, port);
+            }
+            sender.send(OK);
+
+            String[] strs = new String(packet.getData()).split("\\|");
+            String fileName = strs[0];
+            long fileSize = Long.parseLong(strs[1]);
+            System.out.println("File: " + fileName + " size:" + fileSize);
+            long received = 0;
+
+            MessageDigest md5 = MessageDigest.getInstance("MD5");
+            try (OutputStream os = new FileOutputStream(fileName)) {
+                System.out.println("Waiting contents");
+                while (received < fileSize) {
+                    packet = receiver.take();
+                    byte[] data = packet.getData();
+                    md5.update(data);
+                    os.write(data);
+                    received += data.length;
+                    System.out.println("Received " + received + "/" + fileSize);
+                    sender.send("OK".getBytes());
+                }
+                System.out.println("Waiting for MD5 checksum...");
+                if (Arrays.equals(md5.digest(), receiver.take().getData())) {
+                    System.out.println("Checksum OK! Success!");
+                    sender.send(OK);
+                } else {
+                    sender.send(NOK);
+                }
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            } finally {
+                receiver.stop();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException(e);
+        } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException(e);
         }
-    }
-
-    public void listen() throws IOException {
-        while (true) {
-            String received = receiveString();
-            if (received.startsWith("[") && received.endsWith("]")) {
-                receiveFile(received.substring(1, received.length() - 1));
-            } else {
-                System.out.print(received);
-            }
-        }
-    }
-
-    private void receiveFile(String fileName) {
-        try {
-            try (FileOutputStream fw = new FileOutputStream(fileName)) {
-                while (true) {
-                    byte[] b = receiveBytes();
-                    String s = new String(b);
-                    if ("[EOF]".equals(s)) {
-                        break;
-                    } else {
-                        fw.write(b);
-                    }
-                }
-            }
-        } catch (Exception ex) {
-            throw new RuntimeException(ex);
-        }
-    }
-
-    private byte[] receiveBytes() throws IOException {
-        DatagramPacket packet = new DatagramPacket(buf, buf.length);
-        socket.receive(packet);
-        return Arrays.copyOfRange(packet.getData(), packet.getOffset(), packet.getLength());
-    }
-
-    private String receiveString() throws IOException {
-        DatagramPacket packet = new DatagramPacket(buf, buf.length);
-        socket.receive(packet);
-        return getString(packet);
-    }
-
-    private String getString(DatagramPacket packet) {
-        return new String(packet.getData(), packet.getOffset(), packet.getLength());
-    }
-
-    @Override
-    public void close() {
-        socket.close();
     }
 }

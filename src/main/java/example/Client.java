@@ -1,70 +1,72 @@
 package example;
 
-import java.io.*;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetAddress;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
 
-public class Client implements AutoCloseable {
-    private byte[] buf = new byte[1024];
-    private final DatagramSocket socket;
-    private InetAddress address;
-    private int port;
+public class Client {
+    private byte[] buffer = new byte[1024-Long.BYTES];
+    private Sender sender;
+    private Receiver receiver;
+    private int retries = 10;
 
     public Client(String ip, int port) {
+        sender = new Sender(ip, port);
+        if ("localhost".equals(ip) || "127.0.0.1".equals(ip)) {
+            receiver = new Receiver(port + 1);
+        } else {
+            receiver = new Receiver(port);
+        }
+    }
+
+
+    public void sendFile(String filePath) throws IOException {
+        System.out.println("File: "+filePath);
+        receiver.listen();
         try {
-            this.address = InetAddress.getByName(ip);
-            this.port = port;
-            socket = new DatagramSocket();
-        } catch (Exception e) {
+            Path path = Paths.get(filePath);
+            long size = Files.size(path);
+            System.out.println("Size: "+size);
+            String fileName = path.getFileName().toString();
+            trySend(fileName + "|" + size);
+            InputStream inputStream = Files.newInputStream(path);
+            int length;
+            MessageDigest md5 = MessageDigest.getInstance("MD5");
+            while ((length = inputStream.read(buffer)) >= 0) {
+                byte[] data = Arrays.copyOf(buffer, length);
+                md5.update(data);
+                trySend(data);
+            }
+            System.out.println("File complete");
+            System.out.println("Sending MD5 checksum");
+            trySend(md5.digest());
+            receiver.stop();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            e.printStackTrace();
+        } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException(e);
         }
     }
 
-    public void send(InputStreamReader reader) {
-        try {
-            int chr;
-            while ((chr = reader.read()) != -1) {
-                buf[0] = (byte) chr;
-                DatagramPacket packet = new DatagramPacket(buf, 0, 1, address, port);
-                socket.send(packet);
+    public void trySend(String str) throws InterruptedException {
+        trySend(str.getBytes());
+    }
+
+    public void trySend(byte[] data) throws InterruptedException {
+        for (int i = 0; i < retries; i++) {
+            System.out.println("Try #"+i);
+            sender.send(data);
+            String reply = new String(receiver.take().getData());
+            if ("OK".equals(reply)) {
+                return;
             }
-        } catch (Exception ex) {
-            throw new RuntimeException();
         }
-    }
-
-    public void send(InputStream inputStream) {
-        try {
-            int length;
-            while ((length = inputStream.read(buf)) != -1) {
-                DatagramPacket packet = new DatagramPacket(buf, 0, length, address, port);
-                socket.send(packet);
-            }
-        } catch (Exception ex) {
-            throw new RuntimeException();
-        }
-    }
-
-
-    public void send(byte[] bytes) {
-        try {
-            DatagramPacket packet = new DatagramPacket(bytes, 0, bytes.length, address, port);
-            socket.send(packet);
-        } catch (Exception ex) {
-            throw new RuntimeException();
-        }
-    }
-
-    public void sendFile(String fileName) throws FileNotFoundException {
-        FileInputStream inputStream = new FileInputStream(fileName);
-        send(("["+fileName+"]").getBytes());
-        send(inputStream);
-        send(("[EOF]").getBytes());
-    }
-
-    @Override
-    public void close() {
-        socket.close();
+        throw new CommunicationException("Number of tries exceded");
     }
 }
