@@ -13,13 +13,35 @@ import static example.Replies.NOK;
 import static example.Replies.OK;
 
 public class Server {
-
     private Receiver receiver;
     private int port;
+    private Sender sender;
 
     public Server(int port) {
-        receiver = new Receiver(port);
+        receiver = new Receiver(
+                port,
+                it -> {
+                    if (getSender() == null) {
+                        createSender(it.getSourcePacket());
+                    }
+                    getSender().send(OK);
+                },
+                it -> {
+                    if (getSender() == null) {
+                        createSender(it);
+                    }
+                    getSender().send(NOK);
+                }
+        );
         this.port = port;
+    }
+
+    private void createSender(DatagramPacket datagramPacket) {
+        if (datagramPacket.getAddress().isLoopbackAddress()) {
+            sender = new Sender(datagramPacket.getAddress(), port + 1);
+        } else {
+            sender = new Sender(datagramPacket.getAddress(), port);
+        }
     }
 
     public void receiveFile() {
@@ -30,15 +52,8 @@ public class Server {
             System.out.println("Info received");
             DatagramPacket sourcePacket = packet.getSourcePacket();
 
-            Sender sender;
             InetAddress address = sourcePacket.getAddress();
             System.out.println("Source: " + address + ":" + sourcePacket.getPort());
-            if (address.isLoopbackAddress()) {
-                sender = new Sender(address, port + 1);
-            } else {
-                sender = new Sender(address, port);
-            }
-            sender.send(OK);
 
             String[] strs = new String(packet.getData()).split("\\|");
             String fileName = strs[0];
@@ -56,14 +71,14 @@ public class Server {
                     os.write(data);
                     received += data.length;
                     System.out.println("Received " + received + "/" + fileSize);
-                    sender.send("OK".getBytes());
                 }
                 System.out.println("Waiting for MD5 checksum...");
                 if (Arrays.equals(md5.digest(), receiver.take().getData())) {
                     System.out.println("Checksum OK! Success!");
-                    sender.send(OK);
+                    getSender().send(OK);
                 } else {
-                    sender.send(NOK);
+                    System.out.println("Checksum NOK! Failure!");
+                    getSender().send(NOK);
                 }
             } catch (IOException e) {
                 throw new RuntimeException(e);
@@ -76,5 +91,9 @@ public class Server {
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    public Sender getSender() {
+        return sender;
     }
 }

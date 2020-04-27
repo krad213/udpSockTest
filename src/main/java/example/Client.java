@@ -17,6 +17,7 @@ public class Client {
 
     public Client(String ip, int port) {
         sender = new Sender(ip, port);
+        sender.setCorrupt(true);
         if ("localhost".equals(ip) || "127.0.0.1".equals(ip)) {
             receiver = new Receiver(port + 1);
         } else {
@@ -67,6 +68,6 @@ public class Client {
                 return;
             }
         }
-        throw new CommunicationException("Number of tries exceded");
+        throw new CommunicationException("Number of tries exceeded");
     }
 }

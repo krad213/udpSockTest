@@ -3,20 +3,31 @@ package example;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
+import java.net.InetAddress;
 import java.net.SocketException;
+import java.util.Optional;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.function.Consumer;
 
 public class Receiver implements AutoCloseable {
     private byte[] buf = new byte[1024];
     private final DatagramSocket socket;
     private BlockingQueue<Packet> receivedPackets = new LinkedBlockingQueue<>();
     private boolean stop = false;
+    private Consumer<Packet> onOk;
+    private Consumer<DatagramPacket> onNok;
 
     public Receiver(int port) {
+        this(port, null, null);
+    }
+
+    public Receiver(int port, Consumer<Packet> onOk, Consumer<DatagramPacket> onNok) {
+        this.onOk = onOk;
+        this.onNok = onNok;
         try {
             socket = new DatagramSocket(port);
-            System.out.println("Receiver created for port:"+port);
+            System.out.println("Receiver created for port:"+ port);
         } catch (SocketException e) {
             throw new RuntimeException(e);
         }
@@ -29,8 +40,12 @@ public class Receiver implements AutoCloseable {
                     Packet received = receive();
                     System.out.println("Received ["+new String(received.getData())+"]");
                     receivedPackets.add(received);
-                } catch (InvalidPacketException | IOException ex) {
+                    Optional.ofNullable(onOk).ifPresent(it->it.accept(received));
+                } catch (InvalidPacketException ex) {
                     System.out.println(ex.getMessage());
+                    Optional.ofNullable(onNok).ifPresent(it->it.accept(ex.getDatagramPacket()));
+                } catch (IOException ex) {
+                    throw new RuntimeException(ex);
                 }
             }
         }).start();

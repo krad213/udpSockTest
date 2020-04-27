@@ -16,7 +16,7 @@ public class Packet {
         CRC32 crc32 = new CRC32();
         crc32.update(data);
         if (crc != crc32.getValue()) {
-            throw new InvalidPacketException("Crc incorrect");
+            throw new InvalidPacketException("Crc incorrect", datagramPacket);
         }
         return new Packet(crc32.getValue(), data, datagramPacket);
     }
