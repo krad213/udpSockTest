@@ -11,7 +11,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.function.Consumer;
 
 public class Receiver implements AutoCloseable {
-    private byte[] buf = new byte[1024];
+    private byte[] buf = new byte[Main.BUFFER_SIZE+Long.BYTES*2];
     private final DatagramSocket socket;
     private BlockingQueue<Packet> receivedPackets = new LinkedBlockingQueue<>();
     private boolean stop = false;
@@ -38,7 +38,7 @@ public class Receiver implements AutoCloseable {
             while (!stop) {
                 try {
                     Packet received = receive();
-                    System.out.println("Received ["+new String(received.getData())+"]");
+                    //System.out.println("Received ["+new String(received.getData())+"]");
                     receivedPackets.add(received);
                     Optional.ofNullable(onOk).ifPresent(it->it.accept(received));
                 } catch (InvalidPacketException ex) {

@@ -9,7 +9,6 @@ import java.util.Random;
 
 public class Sender implements AutoCloseable {
     private final Random random = new Random();
-    private byte[] buf = new byte[1024];
     private final DatagramSocket socket;
     private InetAddress address;
     private int port;
@@ -38,10 +37,10 @@ public class Sender implements AutoCloseable {
         }
     }
 
-    public void send(byte[] data) {
+    public void send(long id, byte[] data) {
         try {
-            System.out.println("Sending [" + new String(data) + "]");
-            Packet packet = new Packet(data);
+            //System.out.println("Sending [" + new String(data) + "]");
+            Packet packet = new Packet(id, data);
             byte[] raw = packet.toBytes();
             DatagramPacket datagramPacket;
             if (corrupt && random.nextFloat() <= 0.3) {
@@ -52,7 +51,7 @@ public class Sender implements AutoCloseable {
             }
             socket.send(datagramPacket);
         } catch (Exception ex) {
-            throw new RuntimeException();
+            throw new RuntimeException(ex);
         }
     }
 
